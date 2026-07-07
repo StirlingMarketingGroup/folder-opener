@@ -1,0 +1,60 @@
+name: Sign Test
+
+# Manually-dispatched dry run of the macOS signing + notarization pipeline,
+# for validating the Apple secrets without cutting a release.
+on: workflow_dispatch
+
+jobs:
+  sign-test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Import Apple certificate
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(uuidgen)
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          curl -sL "https://www.apple.com/certificateauthority/DeveloperIDCA.cer" -o $RUNNER_TEMP/DeveloperIDCA.cer
+          curl -sL "https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer" -o $RUNNER_TEMP/DeveloperIDG2CA.cer
+          security import $RUNNER_TEMP/DeveloperIDCA.cer -k "$KEYCHAIN_PATH" -T /usr/bin/codesign || true
+          security import $RUNNER_TEMP/DeveloperIDG2CA.cer -k "$KEYCHAIN_PATH" -T /usr/bin/codesign || true
+          echo "$APPLE_CERTIFICATE" | base64 --decode > $RUNNER_TEMP/certificate.p12
+          security import $RUNNER_TEMP/certificate.p12 -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+      - name: Build, sign, verify
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          set -euo pipefail
+          go build -trimpath -o folder-opener .
+          codesign --force --options runtime --timestamp \
+            --sign "$APPLE_SIGNING_IDENTITY" folder-opener
+          codesign --verify --verbose=2 folder-opener
+          codesign -dvv folder-opener 2>&1 | grep -E 'Authority|TeamIdentifier|Timestamp'
+
+      - name: Notarize (dry run)
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          zip -j sign-test.zip folder-opener
+          xcrun notarytool submit sign-test.zip \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
