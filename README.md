@@ -84,7 +84,15 @@ const unwatch = folderOpener.watch(running => {
 
 ## Installing the server
 
-Grab the binary for your platform from [Releases](https://github.com/StirlingMarketingGroup/folder-opener/releases), put it somewhere permanent, and run it once. Then enable start-at-login either from the tray menu ("Start at Login") or the CLI:
+Grab the installer for your platform from [Releases](https://github.com/StirlingMarketingGroup/folder-opener/releases):
+
+| OS | Artifact | Autostart |
+|---|---|---|
+| Windows | `.msi` (per-machine, GPO-deployable) | baked in — HKLM `Run` value for all users |
+| macOS | `.dmg` (universal, signed + notarized + stapled) | drag to Applications, launch once, tray → "Start at Login" |
+| Linux | `.deb` | baked in — `/etc/xdg/autostart` entry for all desktop sessions |
+
+A bare `.exe` is also attached for Windows setups that don't want the MSI. When running the bare binary, start-at-login can be managed from the tray menu ("Start at Login") or the CLI:
 
 ```bash
 folder-opener autostart enable    # enable start at login
@@ -92,15 +100,7 @@ folder-opener autostart disable
 folder-opener autostart status
 ```
 
-Per-platform, autostart does the standard thing:
-
-| OS | Mechanism |
-|---|---|
-| Windows | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` value |
-| macOS | `~/Library/LaunchAgents/com.stirlingmarketinggroup.folder-opener.plist` |
-| Linux | `~/.config/autostart/folder-opener.desktop` |
-
-For fleet deployment (GPO), push the exe and set the `Run` registry value directly — the release binary is built with `-H windowsgui` so it never shows a console, which also means the `autostart` CLI subcommands print nothing on Windows.
+The CLI/tray manage the per-user mechanism (HKCU `Run` value / `~/Library/LaunchAgents/com.stirlingmarketinggroup.folder-opener.plist` / `~/.config/autostart/folder-opener.desktop`); the MSI and deb install machine-wide autostart on their own. The Windows release binary is built with `-H windowsgui` so it never shows a console, which also means the `autostart` CLI subcommands print nothing on Windows.
 
 The port can be overridden with the `FOLDER_OPENER_PORT` environment variable (default `29101`); the client takes a matching `port` option.
 

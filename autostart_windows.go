@@ -34,12 +34,19 @@ func disableAutostart() error {
 	return nil
 }
 
+// autostartEnabled also checks HKLM: the MSI installs a machine-wide Run
+// value there. enable/disable only manage the per-user HKCU value.
 func autostartEnabled() bool {
-	key, err := registry.OpenKey(registry.CURRENT_USER, runKeyPath, registry.QUERY_VALUE)
-	if err != nil {
-		return false
+	for _, root := range []registry.Key{registry.CURRENT_USER, registry.LOCAL_MACHINE} {
+		key, err := registry.OpenKey(root, runKeyPath, registry.QUERY_VALUE)
+		if err != nil {
+			continue
+		}
+		_, _, err = key.GetStringValue(runKeyValue)
+		key.Close()
+		if err == nil {
+			return true
+		}
 	}
-	defer key.Close()
-	_, _, err = key.GetStringValue(runKeyValue)
-	return err == nil
+	return false
 }

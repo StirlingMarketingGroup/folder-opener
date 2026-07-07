@@ -8,37 +8,64 @@ permissions:
   contents: write
 
 jobs:
-  # Windows and Linux cross-compile from one runner: the tray library is pure
-  # Go on both (Win32 syscalls / D-Bus). macOS needs cgo, so it gets its own job.
-  build-cross:
+  build-linux:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-      - name: Build linux + windows
+      - name: Build .deb packages
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME}"
           LD="-s -w -X main.version=${VERSION}"
+          go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
           mkdir -p dist
-
-          build() {
-            local goos=$1 goarch=$2 ldflags=$3 bin=$4
-            CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build -trimpath -ldflags "$ldflags" -o "$bin" .
-            zip -j "dist/folder-opener_${VERSION}_${goos}_${goarch}.zip" "$bin"
-            rm "$bin"
-          }
-
-          build linux amd64 "$LD" folder-opener
-          build linux arm64 "$LD" folder-opener
-          # -H windowsgui keeps the server from flashing a console window
-          build windows amd64 "$LD -H windowsgui" folder-opener.exe
-          build windows arm64 "$LD -H windowsgui" folder-opener.exe
+          for arch in amd64 arm64; do
+            CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -trimpath -ldflags "$LD" -o folder-opener .
+            NFPM_ARCH="$arch" NFPM_VERSION="${VERSION#v}" \
+              nfpm package -f packaging/linux/nfpm.yaml -p deb \
+              -t "dist/folder-opener_${VERSION}_linux_${arch}.deb"
+            rm folder-opener
+          done
       - uses: actions/upload-artifact@v6
         with:
-          name: dist-cross
+          name: dist-linux
+          path: dist/*
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Build .msi installers + bare .exe
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME}"
+          # MSI ProductVersion must be numeric x.y.z
+          MSI_VERSION="${VERSION#v}"
+          LD="-s -w -X main.version=${VERSION} -H windowsgui"
+          dotnet tool install --global wix
+          mkdir -p dist
+          for arch in amd64 arm64; do
+            CGO_ENABLED=0 GOOS=windows GOARCH="$arch" go build -trimpath -ldflags "$LD" -o folder-opener.exe .
+            case "$arch" in
+              amd64) wixarch=x64 ;;
+              arm64) wixarch=arm64 ;;
+            esac
+            wix build packaging/windows/folder-opener.wxs \
+              -arch "$wixarch" -d "Version=${MSI_VERSION}" \
+              -o "dist/folder-opener_${VERSION}_windows_${arch}.msi"
+            cp folder-opener.exe "dist/folder-opener_${VERSION}_windows_${arch}.exe"
+            rm folder-opener.exe
+          done
+      - uses: actions/upload-artifact@v6
+        with:
+          name: dist-windows
           path: dist/*
 
   build-macos:
@@ -73,7 +100,7 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-      - name: Build, sign, and notarize universal binary
+      - name: Build .app, sign, create .dmg, notarize, staple
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -88,28 +115,41 @@ jobs:
           CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "$LD" -o folder-opener-arm64 .
           lipo -create -output folder-opener folder-opener-amd64 folder-opener-arm64
 
+          APP="Folder Opener.app"
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+          cp folder-opener "$APP/Contents/MacOS/folder-opener"
+          cp assets/icon.icns "$APP/Contents/Resources/icon.icns"
+          sed "s/__VERSION__/${VERSION#v}/g" packaging/macos/Info.plist > "$APP/Contents/Info.plist"
+
           if [ -n "$APPLE_CERTIFICATE" ] && [ -n "$APPLE_SIGNING_IDENTITY" ]; then
             echo "Signing with Developer ID..."
             codesign --force --options runtime --timestamp \
-              --sign "$APPLE_SIGNING_IDENTITY" folder-opener
-            codesign --verify --verbose folder-opener
+              --sign "$APPLE_SIGNING_IDENTITY" "$APP"
+            codesign --verify --deep --verbose "$APP"
           else
             echo "Skipping code signing — Apple certificate not configured"
           fi
 
           mkdir -p dist
-          ZIP="dist/folder-opener_${VERSION}_darwin_universal.zip"
-          zip -j "$ZIP" folder-opener
+          DMG="dist/folder-opener_${VERSION}_macos_universal.dmg"
+          STAGING=$(mktemp -d)
+          cp -R "$APP" "$STAGING/"
+          ln -s /Applications "$STAGING/Applications"
+          for attempt in 1 2 3; do
+            hdiutil create -volname "Folder Opener" -srcfolder "$STAGING" -ov -format UDZO "$DMG" && break
+            echo "hdiutil attempt $attempt failed, retrying in 10s..."
+            sleep 10
+          done
+          rm -rf "$STAGING"
 
-          # A bare binary can't be stapled (stapler needs a bundle/dmg/pkg);
-          # Gatekeeper verifies the notarization ticket online instead.
           if [ -n "$APPLE_TEAM_ID" ] && [ -n "$APPLE_ID" ] && [ -n "$APPLE_PASSWORD" ]; then
-            echo "Notarizing $ZIP..."
-            xcrun notarytool submit "$ZIP" \
+            echo "Notarizing $DMG..."
+            xcrun notarytool submit "$DMG" \
               --apple-id "$APPLE_ID" \
               --password "$APPLE_PASSWORD" \
               --team-id "$APPLE_TEAM_ID" \
               --wait
+            xcrun stapler staple "$DMG"
           else
             echo "Skipping notarization — Apple credentials not configured"
           fi
@@ -119,7 +159,7 @@ jobs:
           path: dist/*
 
   release:
-    needs: [build-cross, build-macos]
+    needs: [build-linux, build-windows, build-macos]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v6
@@ -136,7 +176,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write # npm provenance attestation
+      id-token: write # npm trusted publishing (OIDC) + provenance
     defaults:
       run:
         working-directory: packages/client
@@ -153,6 +193,10 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME#v}"
+          if npm view "folder-opener@${VERSION}" version >/dev/null 2>&1; then
+            echo "folder-opener@${VERSION} already on the registry — skipping publish"
+            exit 0
+          fi
           # Keep the published version locked to the release tag
           npm version "$VERSION" --no-git-tag-version --allow-same-version
           npm ci

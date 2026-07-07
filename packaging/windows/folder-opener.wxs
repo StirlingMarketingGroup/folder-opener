@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Per-machine MSI, GPO-deployable. Autostart for all users via an HKLM Run
+     value so no per-user setup is needed after a domain push. -->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="Folder Opener"
+           Manufacturer="Stirling Marketing Group"
+           Version="$(var.Version)"
+           UpgradeCode="0F50471E-B120-4843-A7C1-407B70967C4E"
+           Scope="perMachine"
+           Compressed="yes">
+    <MajorUpgrade AllowSameVersionUpgrades="yes"
+                  DowngradeErrorMessage="A newer version of Folder Opener is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Folder Opener">
+        <Component Id="MainExe">
+          <File Id="FolderOpenerExe" Source="folder-opener.exe" KeyPath="yes" />
+        </Component>
+        <Component Id="RunKey" Guid="1E1A47B4-6B21-4A4C-9C8A-AE208804F990">
+          <RegistryValue Root="HKLM"
+                         Key="Software\Microsoft\Windows\CurrentVersion\Run"
+                         Name="Folder Opener"
+                         Type="string"
+                         Value="&quot;[INSTALLFOLDER]folder-opener.exe&quot;"
+                         KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="Folder Opener">
+      <ComponentRef Id="MainExe" />
+      <ComponentRef Id="RunKey" />
+    </Feature>
+  </Package>
+</Wix>

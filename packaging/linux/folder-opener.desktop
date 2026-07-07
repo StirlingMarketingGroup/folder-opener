@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Folder Opener
+Comment=Local "open folder in file browser" companion server
+Exec=/usr/bin/folder-opener
+X-GNOME-Autostart-enabled=true

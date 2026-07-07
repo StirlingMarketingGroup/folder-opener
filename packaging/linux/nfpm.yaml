@@ -1,0 +1,21 @@
+# nfpm config for the .deb package. arch/version are injected by the release
+# workflow via NFPM_ARCH / NFPM_VERSION.
+name: folder-opener
+arch: ${NFPM_ARCH}
+version: ${NFPM_VERSION}
+platform: linux
+section: utils
+priority: optional
+maintainer: Stirling Marketing Group <dev@smg.gg>
+description: >-
+  Local "open folder in file browser" companion server.
+  Lets web apps open folders in the system file manager via localhost.
+homepage: https://github.com/StirlingMarketingGroup/folder-opener
+license: MIT
+contents:
+  - src: ./folder-opener
+    dst: /usr/bin/folder-opener
+  # System-wide autostart: launches for every desktop session, so no per-user
+  # `autostart enable` is needed after installing the package.
+  - src: ./packaging/linux/folder-opener.desktop
+    dst: /etc/xdg/autostart/folder-opener.desktop
