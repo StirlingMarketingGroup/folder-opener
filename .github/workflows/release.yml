@@ -51,8 +51,9 @@ jobs:
 
       # Same keychain-import dance as Dazzle's release workflow; skipped when
       # the signing secrets aren't configured so releases still build unsigned.
+      # (env-based guard: the secrets context isn't allowed in step-level if)
       - name: Import Apple certificate
-        if: secrets.APPLE_CERTIFICATE != ''
+        if: env.APPLE_CERTIFICATE != ''
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
