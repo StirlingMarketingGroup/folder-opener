@@ -13,8 +13,8 @@ jobs:
   build-cross:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
       - name: Build linux + windows
@@ -36,7 +36,7 @@ jobs:
           # -H windowsgui keeps the server from flashing a console window
           build windows amd64 "$LD -H windowsgui" folder-opener.exe
           build windows arm64 "$LD -H windowsgui" folder-opener.exe
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: dist-cross
           path: dist/*
@@ -44,15 +44,15 @@ jobs:
   build-macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
 
       # Same keychain-import dance as Dazzle's release workflow; skipped when
       # the signing secrets aren't configured so releases still build unsigned.
       - name: Import Apple certificate
-        if: env.APPLE_CERTIFICATE != ''
+        if: secrets.APPLE_CERTIFICATE != ''
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -112,7 +112,7 @@ jobs:
           else
             echo "Skipping notarization — Apple credentials not configured"
           fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: dist-macos
           path: dist/*
@@ -121,7 +121,7 @@ jobs:
     needs: [build-cross, build-macos]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v6
         with:
           path: dist
           merge-multiple: true
@@ -140,8 +140,8 @@ jobs:
       run:
         working-directory: packages/client
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
