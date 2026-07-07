@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Per-machine MSI, GPO-deployable. Autostart for all users via an HKLM Run
      value so no per-user setup is needed after a domain push. -->
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
   <Package Name="Folder Opener"
            Manufacturer="Stirling Marketing Group"
            Version="$(var.Version)"
@@ -32,5 +33,27 @@
       <ComponentRef Id="MainExe" />
       <ComponentRef Id="RunKey" />
     </Feature>
+
+    <!-- The tray app locks its own exe; terminate the running instance during
+         upgrades/uninstalls so the MSI never shows a files-in-use/reboot
+         prompt. It's a stateless localhost server — killing it is safe, and
+         LaunchApp starts the new version right back up. -->
+    <util:CloseApplication Id="CloseFolderOpener"
+                           Target="folder-opener.exe"
+                           CloseMessage="no"
+                           RebootPrompt="no"
+                           TerminateProcess="0" />
+
+    <!-- Launch immediately after install/upgrade so there's zero manual setup:
+         install the MSI and the server is running. In session-less contexts
+         (GPO machine install at boot) this is a no-op and the HKLM Run value
+         picks it up at first login instead. -->
+    <CustomAction Id="LaunchApp"
+                  FileRef="FolderOpenerExe"
+                  ExeCommand=""
+                  Return="asyncNoWait" />
+    <InstallExecuteSequence>
+      <Custom Action="LaunchApp" After="InstallFinalize" Condition="NOT REMOVE" />
+    </InstallExecuteSequence>
   </Package>
 </Wix>
