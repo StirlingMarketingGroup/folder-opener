@@ -114,12 +114,13 @@ cd packages/client && npm ci && npm run build   # build the npm client
 
 Releases: push a `v*` tag; GitHub Actions builds Windows (amd64/arm64), Linux (amd64/arm64), and a macOS universal binary, attaches them to the release, and publishes the npm client at the tag's version.
 
-Release secrets (all optional — the corresponding step is skipped when missing):
+npm publishing uses [trusted publishing](https://docs.npmjs.com/trusted-publishers) (GitHub Actions OIDC) — no token to rotate; the trusted publisher is configured on the npm package settings for this repo's `release.yml`.
+
+Release secrets (org-level, shared with Dazzle; the signing/notarization steps are skipped when missing):
 
 | Secret | Purpose |
 |---|---|
-| `NPM_TOKEN` | Automatic `npm publish` of `packages/client` |
 | `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY` | Developer ID code signing of the macOS binary |
 | `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` | Notarization via `notarytool` |
 
-These are the same Apple secrets Dazzle's release workflow uses. With signing + notarization in place, the macOS binary runs without any Gatekeeper "Open Anyway" dance; without them, unsigned builds need a right-click → Open (or `xattr -d com.apple.quarantine`) on first launch.
+With signing + notarization in place, the macOS binary runs without any Gatekeeper "Open Anyway" dance; without them, unsigned builds need a right-click → Open (or `xattr -d com.apple.quarantine`) on first launch.

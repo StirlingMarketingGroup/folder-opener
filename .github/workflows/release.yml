@@ -145,17 +145,14 @@ jobs:
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
+      # Auth is npm trusted publishing (OIDC) — no token. Requires npm >= 11.5,
+      # newer than what ships with the runner's Node.
+      - run: npm install -g npm@latest
       - name: Publish to npm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
-          if [ -z "$NODE_AUTH_TOKEN" ]; then
-            echo "Skipping npm publish — NPM_TOKEN not configured"
-            exit 0
-          fi
           VERSION="${GITHUB_REF_NAME#v}"
           # Keep the published version locked to the release tag
           npm version "$VERSION" --no-git-tag-version --allow-same-version
           npm ci
-          npm publish --provenance --access public
+          npm publish --access public
