@@ -1,0 +1,161 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  # Windows and Linux cross-compile from one runner: the tray library is pure
+  # Go on both (Win32 syscalls / D-Bus). macOS needs cgo, so it gets its own job.
+  build-cross:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build linux + windows
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME}"
+          LD="-s -w -X main.version=${VERSION}"
+          mkdir -p dist
+
+          build() {
+            local goos=$1 goarch=$2 ldflags=$3 bin=$4
+            CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build -trimpath -ldflags "$ldflags" -o "$bin" .
+            zip -j "dist/folder-opener_${VERSION}_${goos}_${goarch}.zip" "$bin"
+            rm "$bin"
+          }
+
+          build linux amd64 "$LD" folder-opener
+          build linux arm64 "$LD" folder-opener
+          # -H windowsgui keeps the server from flashing a console window
+          build windows amd64 "$LD -H windowsgui" folder-opener.exe
+          build windows arm64 "$LD -H windowsgui" folder-opener.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-cross
+          path: dist/*
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # Same keychain-import dance as Dazzle's release workflow; skipped when
+      # the signing secrets aren't configured so releases still build unsigned.
+      - name: Import Apple certificate
+        if: env.APPLE_CERTIFICATE != ''
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(uuidgen)
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          curl -sL "https://www.apple.com/certificateauthority/DeveloperIDCA.cer" -o $RUNNER_TEMP/DeveloperIDCA.cer
+          curl -sL "https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer" -o $RUNNER_TEMP/DeveloperIDG2CA.cer
+          security import $RUNNER_TEMP/DeveloperIDCA.cer -k "$KEYCHAIN_PATH" -T /usr/bin/codesign || true
+          security import $RUNNER_TEMP/DeveloperIDG2CA.cer -k "$KEYCHAIN_PATH" -T /usr/bin/codesign || true
+          echo "$APPLE_CERTIFICATE" | base64 --decode > $RUNNER_TEMP/certificate.p12
+          security import $RUNNER_TEMP/certificate.p12 -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+      - name: Build, sign, and notarize universal binary
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME}"
+          LD="-s -w -X main.version=${VERSION}"
+          CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags "$LD" -o folder-opener-amd64 .
+          CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "$LD" -o folder-opener-arm64 .
+          lipo -create -output folder-opener folder-opener-amd64 folder-opener-arm64
+
+          if [ -n "$APPLE_CERTIFICATE" ] && [ -n "$APPLE_SIGNING_IDENTITY" ]; then
+            echo "Signing with Developer ID..."
+            codesign --force --options runtime --timestamp \
+              --sign "$APPLE_SIGNING_IDENTITY" folder-opener
+            codesign --verify --verbose folder-opener
+          else
+            echo "Skipping code signing — Apple certificate not configured"
+          fi
+
+          mkdir -p dist
+          ZIP="dist/folder-opener_${VERSION}_darwin_universal.zip"
+          zip -j "$ZIP" folder-opener
+
+          # A bare binary can't be stapled (stapler needs a bundle/dmg/pkg);
+          # Gatekeeper verifies the notarization ticket online instead.
+          if [ -n "$APPLE_TEAM_ID" ] && [ -n "$APPLE_ID" ] && [ -n "$APPLE_PASSWORD" ]; then
+            echo "Notarizing $ZIP..."
+            xcrun notarytool submit "$ZIP" \
+              --apple-id "$APPLE_ID" \
+              --password "$APPLE_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID" \
+              --wait
+          else
+            echo "Skipping notarization — Apple credentials not configured"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-macos
+          path: dist/*
+
+  release:
+    needs: [build-cross, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+
+  publish-npm:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm provenance attestation
+    defaults:
+      run:
+        working-directory: packages/client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "Skipping npm publish — NPM_TOKEN not configured"
+            exit 0
+          fi
+          VERSION="${GITHUB_REF_NAME#v}"
+          # Keep the published version locked to the release tag
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          npm ci
+          npm publish --provenance --access public

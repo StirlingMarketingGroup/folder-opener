@@ -1,0 +1,5 @@
+/folder-opener
+/folder-opener.exe
+dist/
+node_modules/
+.DS_Store

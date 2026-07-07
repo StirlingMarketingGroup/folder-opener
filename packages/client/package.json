@@ -1,0 +1,47 @@
+{
+  "name": "folder-opener",
+  "version": "0.1.0",
+  "description": "TypeScript client for the Folder Opener local companion server (open a folder in the system's file browser)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/StirlingMarketingGroup/folder-opener",
+    "directory": "packages/client"
+  },
+  "keywords": [
+    "folder",
+    "file-browser",
+    "explorer",
+    "finder",
+    "reveal",
+    "local-server",
+    "companion"
+  ],
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.6.0"
+  }
+}
