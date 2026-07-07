@@ -61,7 +61,7 @@ jobs:
             esac
             wix build packaging/windows/folder-opener.wxs \
               -ext WixToolset.Util.wixext \
-              -arch "$wixarch" -d "Version=${MSI_VERSION}" \
+              -arch "$wixarch" -d "Version=${MSI_VERSION}" -pdbtype none \
               -o "dist/folder-opener_${VERSION}_windows_${arch}.msi"
             cp folder-opener.exe "dist/folder-opener_${VERSION}_windows_${arch}.exe"
             rm folder-opener.exe
