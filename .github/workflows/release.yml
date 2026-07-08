@@ -190,8 +190,10 @@ jobs:
           node-version: 22
           registry-url: https://registry.npmjs.org
       # Auth is npm trusted publishing (OIDC) — no token. Requires npm >= 11.5,
-      # newer than what ships with the runner's Node.
-      - run: npm install -g npm@latest
+      # newer than what ships with the runner's Node. Pinned to the 11.x major:
+      # npm@latest self-installed over Node 22's npm broke provenance with
+      # "Cannot find module 'sigstore'" (v0.2.2 release).
+      - run: npm install -g npm@11
       - name: Publish to npm
         run: |
           set -euo pipefail
