@@ -43,6 +43,11 @@ export class FolderOpener {
    * Open a folder in the system's file browser. If the path is a file, it is
    * revealed (selected) in its parent folder instead.
    *
+   * Accepts an absolute local path, a Windows UNC path, or (server v0.2+) an
+   * `smb://server/share/...` URL — the server mounts the share on demand
+   * where the platform needs it (macOS/Linux), so one payload works on
+   * every OS.
+   *
    * Throws a `FolderOpenerError` with `code: 'not_found'` when the path does
    * not exist on the machine — unlike the legacy protocol-handler approach,
    * a missing folder is a real, detectable error.

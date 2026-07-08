@@ -18,10 +18,18 @@ var (
 // Directories open directly; files are revealed (selected) in their parent
 // folder. Unlike Windows Explorer's default behavior, a missing path is a
 // real error — we never silently open a fallback location.
+//
+// smb:// URLs are resolved to a local path first (mounting the share on
+// demand where the platform needs it) and then opened like any other path.
 func openPath(path string) (action string, err error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return "", fmt.Errorf("%w: empty path", errBadPath)
+	}
+	if isSMBURL(path) {
+		if path, err = resolveSMB(path); err != nil {
+			return "", err
+		}
 	}
 	if !filepath.IsAbs(path) {
 		return "", fmt.Errorf("%w: path must be absolute: %q", errBadPath, path)
