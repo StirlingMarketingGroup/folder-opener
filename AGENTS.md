@@ -16,6 +16,6 @@ cd packages/client && npm ci && npm run build
 - The server binds `127.0.0.1` only. Never bind other interfaces.
 - One generic endpoint philosophy: no app-specific business logic, auth, or branding in this repo.
 - A missing path must stay a real error (`404` + `code: "not_found"`) — never fall back to opening a different location.
-- Tests must never open a real file browser window: only exercise invalid-path and handler-level error cases.
+- Tests must never open a real file browser window or mount a network share: only exercise invalid-path, URL-parsing, and handler-level error cases.
 - Icons are generated from the SVGs in `assets/` (rsvg-convert + ImageMagick); regenerate rather than hand-editing the PNGs/ICO.
 - macOS tray uses the template icon (`assets/tray-template.png`); Windows uses `icon.ico`; Linux uses `tray.png`.

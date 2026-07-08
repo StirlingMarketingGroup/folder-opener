@@ -54,6 +54,22 @@ Errors are JSON with a stable `code`:
 
 Paths must be absolute. Windows UNC paths (`\\server\share\...`) count as absolute.
 
+### SMB share URLs
+
+`path` can also be an `smb://server/share/...` URL, so one payload works on every OS even when the share isn't mounted yet:
+
+- **macOS** mounts the share on demand the same way Finder does (NetFS: mounts under `/Volumes`, uses Keychain credentials, shows the standard authentication dialog only when needed) — no extra Finder window at the share root.
+- **Windows** opens the equivalent UNC path (`\\server\share\...`) directly; Windows connects and authenticates natively.
+- **Linux** mounts the share through gvfs (`gio mount`) and opens the path inside the user's gvfs FUSE mount.
+
+```bash
+curl -X POST http://localhost:29101/open \
+  -H 'Content-Type: application/json' \
+  -d '{"path": "smb://storage/Signature Coins/12345"}'
+```
+
+Percent-encoding is optional — literal spaces are accepted. A missing folder below the share is still a real `404`/`not_found`; a share that can't be mounted is a `500` with the mount error.
+
 CORS is permissive (any origin): the server only ever opens the local file browser, and it answers Chrome's Private Network Access preflight so pages on public origins can reach `localhost`. Chrome will still ask the user once for "local network access" permission per origin — same as Dazzle.
 
 ## Client library
