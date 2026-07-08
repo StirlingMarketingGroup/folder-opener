@@ -20,9 +20,12 @@ func revealFile(path string) error {
 // runExplorer fires Explorer and deliberately ignores its exit code:
 // explorer.exe famously exits 1 even on success. openPath has already
 // verified the target exists, which is the error case we care about.
+//
+// Do NOT set HideWindow here: Explorer honors the STARTF_USESHOWWINDOW /
+// SW_HIDE hint and opens the folder window invisible.
 func runExplorer(cmdLine string) error {
 	cmd := exec.Command("explorer.exe")
-	cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: cmdLine, HideWindow: true}
+	cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: cmdLine}
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("start explorer: %w", err)
 	}
