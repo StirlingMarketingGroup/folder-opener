@@ -79,6 +79,8 @@ func openHandler(w http.ResponseWriter, r *http.Request) {
 			status, code = http.StatusNotFound, "not_found"
 		case errors.Is(err, errBadPath):
 			status, code = http.StatusBadRequest, "bad_request"
+		case errors.Is(err, errAccessDenied):
+			status, code = http.StatusForbidden, "access_denied"
 		}
 		writeJSON(w, status, errorResponse{Error: err.Error(), Code: code})
 		return

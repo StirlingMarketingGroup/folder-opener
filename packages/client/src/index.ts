@@ -18,7 +18,7 @@ export interface OpenResult {
   action: 'opened' | 'revealed';
 }
 
-export type ErrorCode = 'bad_request' | 'not_found' | 'internal';
+export type ErrorCode = 'bad_request' | 'not_found' | 'access_denied' | 'internal';
 
 export interface WatchOptions {
   /** Polling interval in milliseconds. @default 5000 */
@@ -51,6 +51,12 @@ export class FolderOpener {
    * Throws a `FolderOpenerError` with `code: 'not_found'` when the path does
    * not exist on the machine — unlike the legacy protocol-handler approach,
    * a missing folder is a real, detectable error.
+   *
+   * Throws `code: 'access_denied'` (server v0.2.3+) when the server process
+   * is denied access to the path AND the file browser couldn't take over —
+   * typically a sign the server is running under a different account than
+   * the desktop user (e.g. launched by an elevated installer), whose
+   * network-share permissions differ.
    */
   async open(path: string): Promise<OpenResult> {
     const res = await fetch(`${this.baseUrl}/open`, {

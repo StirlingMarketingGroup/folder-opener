@@ -45,12 +45,19 @@
                            TerminateProcess="0" />
 
     <!-- Launch immediately after install/upgrade so there's zero manual setup:
-         install the MSI and the server is running. In session-less contexts
-         (GPO machine install at boot) this is a no-op and the HKLM Run value
-         picks it up at first login instead. -->
+         install the MSI and the server is running. Launched via explorer.exe
+         rather than directly: this action runs in the elevated execute
+         sequence, so a direct launch keeps the installer's identity (the
+         admin account typed at the UAC prompt, or an IT remote-assist
+         session) — and the server then authenticates to network shares as
+         THAT account, denying folders the signed-in user can open manually.
+         Explorer hands the launch to the session shell, so the server runs
+         as the actual desktop user. In session-less contexts (GPO machine
+         install at boot) this is a no-op and the HKLM Run value picks it up
+         at first login instead. -->
     <CustomAction Id="LaunchApp"
-                  FileRef="FolderOpenerExe"
-                  ExeCommand=""
+                  Directory="INSTALLFOLDER"
+                  ExeCommand='[WindowsFolder]explorer.exe "[INSTALLFOLDER]folder-opener.exe"'
                   Return="asyncNoWait" />
     <InstallExecuteSequence>
       <Custom Action="LaunchApp" After="InstallFinalize" Condition="NOT REMOVE" />

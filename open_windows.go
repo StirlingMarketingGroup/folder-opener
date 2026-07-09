@@ -15,6 +15,47 @@ func openDir(path string) error {
 	return runExplorer(fmt.Sprintf(`explorer.exe "%s"`, path))
 }
 
+// openDenied handles a path os.Stat can't access (ERROR_ACCESS_DENIED).
+// Explorer hands new windows to the session shell, which runs as the desktop
+// user — so even when THIS process is denied (it may hold a different token
+// than the desktop user; see the MSI LaunchApp comment), the folder still
+// opens with the user's own permissions, and if even they lack access
+// Explorer shows its native permission error.
+//
+// FindFirstFile needs only list permission on the PARENT directory, so it
+// usually still reveals whether the target is a folder even when opening the
+// target itself is denied. When it too is denied the target is revealed
+// (/select) rather than opened — reveal is safe for files and folders alike,
+// while `explorer.exe "<file>"` would EXECUTE a file, which a localhost
+// caller must never be able to trigger on a path this process can't even
+// stat.
+func openDenied(path string) (action string, ok bool) {
+	pathPtr, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return "", false
+	}
+	var data windows.Win32finddata
+	handle, err := windows.FindFirstFile(pathPtr, &data)
+	if err != nil {
+		if err := revealFile(path); err != nil {
+			return "", false
+		}
+		return "revealed", true
+	}
+	_ = windows.FindClose(handle)
+
+	if data.FileAttributes&windows.FILE_ATTRIBUTE_DIRECTORY == 0 {
+		if err := revealFile(path); err != nil {
+			return "", false
+		}
+		return "revealed", true
+	}
+	if err := openDir(path); err != nil {
+		return "", false
+	}
+	return "opened", true
+}
+
 func revealFile(path string) error {
 	// /select must be passed as one comma-joined token with the path quoted;
 	// Go's default argv quoting would wrap the whole thing in quotes and

@@ -25,3 +25,7 @@ func revealFile(path string) error {
 	}
 	return openDir(filepath.Dir(path))
 }
+
+// openDenied: no recovery exists on Linux — the server runs as the desktop
+// user (autostart), so the file manager would be denied exactly the same way.
+func openDenied(string) (string, bool) { return "", false }

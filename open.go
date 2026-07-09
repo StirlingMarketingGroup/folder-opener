@@ -10,8 +10,9 @@ import (
 )
 
 var (
-	errNotFound = errors.New("path does not exist")
-	errBadPath  = errors.New("bad path")
+	errNotFound     = errors.New("path does not exist")
+	errBadPath      = errors.New("bad path")
+	errAccessDenied = errors.New("access denied")
 )
 
 // openPath validates the path and opens it in the system file browser.
@@ -40,6 +41,18 @@ func openPath(path string) (action string, err error) {
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return "", fmt.Errorf("%w: %q", errNotFound, path)
+		}
+		if errors.Is(err, os.ErrPermission) {
+			// This process's identity can be narrower than the desktop
+			// user's — e.g. an elevated or IT-assisted install launched the
+			// server as the installer, whose network-share access differs
+			// from the signed-in user's. openDenied (per-platform) decides
+			// whether the file browser, which DOES run as the desktop user,
+			// can still handle the path.
+			if action, ok := openDenied(path); ok {
+				return action, nil
+			}
+			return "", fmt.Errorf("%w: %q", errAccessDenied, path)
 		}
 		return "", fmt.Errorf("stat %q: %w", path, err)
 	}
