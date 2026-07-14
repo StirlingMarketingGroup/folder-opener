@@ -52,15 +52,23 @@
          session) — and the server then authenticates to network shares as
          THAT account, denying folders the signed-in user can open manually.
          Explorer hands the launch to the session shell, so the server runs
-         as the actual desktop user. In session-less contexts (GPO machine
-         install at boot) this is a no-op and the HKLM Run value picks it up
-         at first login instead. -->
+         as the actual desktop user.
+
+         UILevel >= 4 restricts the launch to interactive installs. A GPO
+         machine install at boot runs silently (UILevel 2) as SYSTEM in
+         session 0, where there is NO shell to hand off to — explorer.exe
+         just runs the exe itself, leaving a server that answers on the port
+         but opens Explorer windows on session 0's invisible desktop (and
+         blocks the user's logon copy from binding the port). Silent installs
+         rely on the HKLM Run value starting the server at each user's next
+         logon instead. The server also refuses to run in session 0 as a
+         second line of defense. -->
     <CustomAction Id="LaunchApp"
                   Directory="INSTALLFOLDER"
                   ExeCommand='[WindowsFolder]explorer.exe "[INSTALLFOLDER]folder-opener.exe"'
                   Return="asyncNoWait" />
     <InstallExecuteSequence>
-      <Custom Action="LaunchApp" After="InstallFinalize" Condition="NOT REMOVE" />
+      <Custom Action="LaunchApp" After="InstallFinalize" Condition="NOT REMOVE AND UILevel &gt;= 4" />
     </InstallExecuteSequence>
   </Package>
 </Wix>
