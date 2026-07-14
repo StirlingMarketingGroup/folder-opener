@@ -44,6 +44,17 @@ func main() {
 		}
 	}
 
+	// A copy launched in session 0 (a GPO machine-context install at boot,
+	// any service context) is worse than not running at all: it serves HTTP
+	// so clients think it's healthy, but every Explorer window it opens lands
+	// on session 0's invisible desktop — and it squats the port the user's
+	// logon copy needs. Bail out; the autostart Run value starts a real one
+	// at user logon.
+	if inSessionZero() {
+		log.Println("running in session 0 (no interactive desktop) — exiting; autostart will start Folder Opener at user logon")
+		return
+	}
+
 	port := defaultPort
 	if v := os.Getenv("FOLDER_OPENER_PORT"); v != "" {
 		p, err := strconv.Atoi(v)
