@@ -19,6 +19,7 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME}"
+          FILE_VERSION="${GITHUB_REF_NAME#v}"
           LD="-s -w -X main.version=${VERSION}"
           go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
           mkdir -p dist
@@ -26,7 +27,7 @@ jobs:
             CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -trimpath -ldflags "$LD" -o folder-opener .
             NFPM_ARCH="$arch" NFPM_VERSION="${VERSION#v}" \
               nfpm package -f packaging/linux/nfpm.yaml -p deb \
-              -t "dist/folder-opener_${VERSION}_linux_${arch}.deb"
+              -t "dist/folder-opener_${FILE_VERSION}_linux_${arch}.deb"
             rm folder-opener
           done
       - uses: actions/upload-artifact@v6
@@ -46,6 +47,7 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME}"
+          FILE_VERSION="${GITHUB_REF_NAME#v}"
           # MSI ProductVersion must be numeric x.y.z
           MSI_VERSION="${VERSION#v}"
           LD="-s -w -X main.version=${VERSION} -H windowsgui"
@@ -62,8 +64,8 @@ jobs:
             wix build packaging/windows/folder-opener.wxs \
               -ext WixToolset.Util.wixext \
               -arch "$wixarch" -d "Version=${MSI_VERSION}" -pdbtype none \
-              -o "dist/folder-opener_${VERSION}_windows_${arch}.msi"
-            cp folder-opener.exe "dist/folder-opener_${VERSION}_windows_${arch}.exe"
+              -o "dist/folder-opener_${FILE_VERSION}_windows_${arch}.msi"
+            cp folder-opener.exe "dist/folder-opener_${FILE_VERSION}_windows_${arch}.exe"
             rm folder-opener.exe
           done
       - uses: actions/upload-artifact@v6
@@ -113,6 +115,7 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME}"
+          FILE_VERSION="${GITHUB_REF_NAME#v}"
           LD="-s -w -X main.version=${VERSION}"
           CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags "$LD" -o folder-opener-amd64 .
           CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "$LD" -o folder-opener-arm64 .
@@ -134,7 +137,7 @@ jobs:
           fi
 
           mkdir -p dist
-          DMG="dist/folder-opener_${VERSION}_macos_universal.dmg"
+          DMG="dist/folder-opener_${FILE_VERSION}_macos_universal.dmg"
           STAGING=$(mktemp -d)
           cp -R "$APP" "$STAGING/"
           ln -s /Applications "$STAGING/Applications"
